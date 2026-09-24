@@ -91,6 +91,11 @@
   </section>
 
   <section>
+    <h2>ステージ</h2>
+    <div class="row" id="stages"></div>
+  </section>
+
+  <section>
     <h2>姿勢</h2>
     <div class="row" id="poses"></div>
   </section>
@@ -167,7 +172,7 @@ const TEST = new URLSearchParams(location.search);
 const STORE_KEY = 'vrbox.v1';
 function defaultStore(){
   return { users:[1,2,3,4].map(n=>({id:'u'+n,name:'ユーザー'+n})), records:{},
-           last:{ user:'u1', level:'easy', minutes:5, arm:'both', pose:'stand' } };
+           last:{ user:'u1', level:'easy', minutes:5, arm:'both', pose:'stand', stage:'space' } };
 }
 function loadStore(){
   try{ const s = JSON.parse(localStorage.getItem(STORE_KEY)); if(s && s.users) return s; }catch(e){}
@@ -226,6 +231,7 @@ function renderAll(){
   opt($('#levels'), Object.entries(LEVELS).map(([k,v])=>[k,v.label,v.sub]), 'level');
   opt($('#minutes'), [[1,'1分'],[5,'5分'],[7,'7分'],[10,'10分']], 'minutes');
   opt($('#arms'), [['both','両手'],['L','片手（左）'],['R','片手（右）']], 'arm');
+  opt($('#stages'), [['space','宇宙','星と惑星のあいだ'],['roof','ビルの屋上','夜景のヘリポート'],['neon','ネオン都市','光の中を走る']], 'stage');
   opt($('#poses'), [['stand','立って'],['sit','座ったまま','しゃがまず、左右によけるだけ']], 'pose');
   renderTracks(); renderRecords();
 }
@@ -376,61 +382,275 @@ $('#deskWrap').appendChild(renderer.domElement);
 addEventListener('resize',()=>{ if(renderer.xr.isPresenting) return; camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x0b0d17);
-scene.fog=new THREE.Fog(0x0b0d17,7,18);
-const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.03,60);
+scene.background=new THREE.Color(0x05060f);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.03,1200);
 camera.position.set(0,1.6,0);
-scene.add(new THREE.HemisphereLight(0xdde4ff,0x202040,1.3));
-const dl=new THREE.DirectionalLight(0xffffff,1.2); dl.position.set(1,3,2); scene.add(dl);
+const hemi=new THREE.HemisphereLight(0xdde4ff,0x202040,1.3); scene.add(hemi);
+const dl=new THREE.DirectionalLight(0xffffff,1.4); dl.position.set(2,4,3); scene.add(dl);
+const _v=new THREE.Vector3(), _q=new THREE.Quaternion(), _qi=new THREE.Quaternion(), _up=new THREE.Vector3(0,1,0);
 
 const stage=new THREE.Group(); scene.add(stage);
-const grid=new THREE.GridHelper(40,80,0x3355ff,0x1a2046); scene.add(grid);
-{ // 床の足元マーク（ここから動かない）
-  const ring=new THREE.Mesh(new THREE.RingGeometry(0.35,0.4,48),new THREE.MeshBasicMaterial({color:0xffcc33,transparent:true,opacity:0.6}));
-  ring.rotation.x=-Math.PI/2; ring.position.y=0.005; stage.add(ring);
-  const laneMat=new THREE.MeshBasicMaterial({color:0x5566ff,transparent:true,opacity:0.35});
-  for(const x of [-0.9,0.9]){ const l=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.02,20),laneMat); l.position.set(x,0.01,-10); stage.add(l); }
+{ // 足元マーク（ここから動かない）
+  const ring=new THREE.Mesh(new THREE.RingGeometry(0.35,0.4,48),new THREE.MeshBasicMaterial({color:0xffcc33,transparent:true,opacity:0.7}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=0.012; stage.add(ring);
 }
 
-// 共有する形と色
-const G_SPHERE=new THREE.SphereGeometry(0.11,24,16);
-const G_RING=new THREE.TorusGeometry(0.14,0.012,8,40);
-const G_ARROW=new THREE.ConeGeometry(0.055,0.11,16);
-const G_FIST=new THREE.SphereGeometry(0.05,16,12);
-const G_BAR=new THREE.BoxGeometry(2.4,0.3,0.12);
-const G_WALL=new THREE.BoxGeometry(1.2,2.6,0.05);
-const G_BIGARROW=new THREE.ConeGeometry(0.16,0.3,20);
+/* ---------- 背景（ステージ） ---------- */
+function cvTex(w,h,draw,repeat){
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h; draw(cv.getContext('2d'),w,h);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace;
+  if(repeat){ t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(repeat[0],repeat[1]); }
+  t.anisotropy=4; return t;
+}
+function skyDome(stops){
+  const tex=cvTex(4,512,(x,w,h)=>{ const g=x.createLinearGradient(0,0,0,h); for(const [o,c] of stops) g.addColorStop(o,c); x.fillStyle=g; x.fillRect(0,0,w,h); });
+  return new THREE.Mesh(new THREE.SphereGeometry(900,32,24),new THREE.MeshBasicMaterial({map:tex,side:THREE.BackSide,fog:false,depthWrite:false}));
+}
+const dotTex=cvTex(64,64,(x)=>{ const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.3,'rgba(255,255,255,.8)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,64); });
+function glowSprite(color,scale,opacity=1){
+  const t=cvTex(128,128,(x)=>{ const g=x.createRadialGradient(64,64,0,64,64,64); g.addColorStop(0,color); g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g; x.fillRect(0,0,128,128); });
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,transparent:true,opacity}));
+  s.scale.set(scale,scale,1); return s;
+}
+function starField(n,rMin,rMax,size){
+  const pos=new Float32Array(n*3), col=new Float32Array(n*3), c=new THREE.Color();
+  for(let i=0;i<n;i++){
+    const u=Math.random()*2-1, th=Math.random()*Math.PI*2, r=rMin+Math.random()*(rMax-rMin), s=Math.sqrt(1-u*u);
+    pos.set([r*s*Math.cos(th), r*u, r*s*Math.sin(th)],i*3);
+    c.setHSL(0.55+Math.random()*0.2,0.6,0.75+Math.random()*0.25); col.set([c.r,c.g,c.b],i*3);
+  }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  return new THREE.Points(g,new THREE.PointsMaterial({size,map:dotTex,vertexColors:true,transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending}));
+}
+// こちらに向かって流れてくる光の粒（スピード感）
+function streaks(n,color,rMin,rMax,size){
+  const pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2, r=rMin+Math.random()*(rMax-rMin); pos.set([Math.cos(a)*r,1.5+Math.sin(a)*r,-Math.random()*200],i*3); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const p=new THREE.Points(g,new THREE.PointsMaterial({size,color,map:dotTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+  p.userData.tick=(dt,speed)=>{ const a=g.attributes.position.array; for(let i=2;i<a.length;i+=3){ a[i]+=dt*speed; if(a[i]>5) a[i]-=200; } g.attributes.position.needsUpdate=true; };
+  return p;
+}
+function platform(radius,rimColor,topColor){
+  const g=new THREE.Group();
+  const top=cvTex(512,512,(x,w)=>{
+    x.fillStyle=topColor; x.fillRect(0,0,w,w);
+    x.strokeStyle='rgba(120,200,255,.25)'; x.lineWidth=2;
+    const R=28; for(let yy=-1;yy<12;yy++) for(let xx=-1;xx<14;xx++){ const cx=xx*R*1.5, cy=yy*R*1.732+(xx%2?R*0.866:0);
+      x.beginPath(); for(let k=0;k<6;k++){ const a=Math.PI/3*k; x.lineTo(cx+R*Math.cos(a),cy+R*Math.sin(a)); } x.closePath(); x.stroke(); }
+  });
+  const disc=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius*0.9,0.25,64),
+    [new THREE.MeshStandardMaterial({color:0x1a1e2e,metalness:0.8,roughness:0.35}),
+     new THREE.MeshStandardMaterial({map:top,metalness:0.6,roughness:0.4}),
+     new THREE.MeshStandardMaterial({color:0x111320})]);
+  disc.position.y=-0.125; g.add(disc);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(radius,0.03,8,96),new THREE.MeshBasicMaterial({color:rimColor}));
+  rim.rotation.x=Math.PI/2; rim.position.y=0.005; g.add(rim);
+  const under=glowSprite('rgba(80,160,255,.6)',radius*3.5,0.7); under.position.y=-0.6; g.add(under);
+  return g;
+}
+
+const ENV_BUILD={
+  space(){
+    const g=new THREE.Group(); g.userData.fog=null;
+    g.add(skyDome([[0,'#01010a'],[0.45,'#080a24'],[0.55,'#120a2a'],[1,'#02020a']]));
+    g.add(starField(2500,300,800,3.2));
+    for(const [c,x,y,z,s] of [['rgba(150,60,255,.55)',-300,120,-500,520],['rgba(40,120,255,.5)',260,-40,-560,560],
+      ['rgba(255,60,160,.4)',60,220,-620,440],['rgba(40,220,255,.35)',-420,-120,-300,480]]){ const n=glowSprite(c,s); n.position.set(x,y,z); g.add(n); }
+    // 輪のある惑星
+    const bands=cvTex(512,256,(x,w,h)=>{ for(let yy=0;yy<h;yy+=4){ const v=Math.sin(yy*0.07)*0.5+Math.sin(yy*0.21)*0.3;
+      x.fillStyle=`hsl(${22+v*14},${55+v*20}%,${48+v*18}%)`; x.fillRect(0,yy,w,4);} });
+    const planet=new THREE.Mesh(new THREE.SphereGeometry(70,48,32),new THREE.MeshStandardMaterial({map:bands,roughness:0.9,fog:false}));
+    planet.position.set(170,40,-420); planet.rotation.z=0.35; g.add(planet);
+    const ringTex=cvTex(256,4,(x,w)=>{ const gr=x.createLinearGradient(0,0,w,0); gr.addColorStop(0,'rgba(255,220,180,0)'); gr.addColorStop(0.3,'rgba(255,220,180,.7)'); gr.addColorStop(0.6,'rgba(200,160,130,.4)'); gr.addColorStop(1,'rgba(255,220,180,0)'); x.fillStyle=gr; x.fillRect(0,0,w,4); });
+    const rg=new THREE.RingGeometry(95,160,96,1); const uv=rg.attributes.uv, ps=rg.attributes.position;
+    for(let i=0;i<uv.count;i++){ const r=Math.hypot(ps.getX(i),ps.getY(i)); uv.setXY(i,(r-95)/65,0.5); }
+    const ring=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({map:ringTex,transparent:true,side:THREE.DoubleSide,fog:false,depthWrite:false}));
+    ring.position.copy(planet.position); ring.rotation.set(-1.2,0.2,0.35); g.add(ring);
+    const moon=new THREE.Mesh(new THREE.SphereGeometry(12,32,16),new THREE.MeshStandardMaterial({color:0x9aa6c0,roughness:1,fog:false}));
+    moon.position.set(-160,70,-300); g.add(moon);
+    g.add(platform(1.4,0x3fe0ff,'#101628'));
+    const st=streaks(260,0x9fd8ff,3,25,0.25); g.add(st);
+    g.userData.tick=(dt,sp)=>{ st.userData.tick(dt,sp*3); planet.rotation.y+=dt*0.02; };
+    return g;
+  },
+  roof(){
+    const g=new THREE.Group(); g.userData.fog=[0x1b1030,80,650];
+    g.add(skyDome([[0,'#03040e'],[0.38,'#0d1030'],[0.47,'#3a1d52'],[0.5,'#ff6a4a'],[0.52,'#241236'],[1,'#07050d']]));
+    g.add(starField(600,500,800,2.5));
+    const moon=glowSprite('rgba(255,240,210,1)',90); moon.position.set(-250,260,-600); g.add(moon);
+    // 屋上
+    const floorTex=cvTex(1024,1024,(x,w)=>{
+      x.fillStyle='#24252c'; x.fillRect(0,0,w,w);
+      for(let i=0;i<4000;i++){ x.fillStyle=`rgba(255,255,255,${Math.random()*0.04})`; x.fillRect(Math.random()*w,Math.random()*w,3,3); }
+      x.strokeStyle='#e8c33a'; x.lineWidth=14; x.beginPath(); x.arc(w/2,w/2,210,0,Math.PI*2); x.stroke();
+      x.fillStyle='#e8c33a'; x.font='bold 260px sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('H',w/2,w/2+10);
+    });
+    const roofTop=new THREE.MeshStandardMaterial({map:floorTex,roughness:0.9}), roofSide=new THREE.MeshStandardMaterial({color:0x2a2b33});
+    const roof=new THREE.Mesh(new THREE.BoxGeometry(14,0.4,14),[roofSide,roofSide,roofTop,roofSide,roofSide,roofSide]);
+    roof.position.y=-0.2; g.add(roof);
+    const tower=new THREE.Mesh(new THREE.BoxGeometry(14,200,14),new THREE.MeshStandardMaterial({color:0x14151c}));
+    tower.position.y=-100.4; g.add(tower);
+    const railM=new THREE.MeshBasicMaterial({color:0x33e0ff});
+    for(const [x,z,w,d] of [[0,-7,14,0.06],[0,7,14,0.06],[-7,0,0.06,14],[7,0,0.06,14]]){
+      const r=new THREE.Mesh(new THREE.BoxGeometry(w,0.06,d),railM); r.position.set(x,1.0,z); g.add(r);
+      const r2=new THREE.Mesh(new THREE.BoxGeometry(w,0.04,d),railM); r2.position.set(x,0.02,z); g.add(r2);
+    }
+    // 街のビル
+    const win=cvTex(128,256,(x,w,h)=>{ x.fillStyle='#0a0b12'; x.fillRect(0,0,w,h);
+      for(let yy=4;yy<h;yy+=10) for(let xx=4;xx<w;xx+=10){ const r=Math.random(); if(r<0.45){ x.fillStyle=r<0.08?'#9fd8ff':r<0.3?'#ffd98a':'#ffb45a'; x.fillRect(xx,yy,6,6);} } });
+    const bm=new THREE.MeshStandardMaterial({map:win,emissiveMap:win,emissive:0xffffff,emissiveIntensity:1.1,color:0x333640,roughness:0.8});
+    const N=420, inst=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),bm,N), m4=new THREE.Matrix4(), q=new THREE.Quaternion(), sc=new THREE.Vector3(), p=new THREE.Vector3();
+    const tops=[];
+    for(let i=0;i<N;i++){
+      const a=Math.random()*Math.PI*2, r=30+Math.pow(Math.random(),0.7)*420;
+      const w=8+Math.random()*22, top=-70+Math.random()*(r<120?90:150), base=-260;
+      p.set(Math.cos(a)*r,(top+base)/2,Math.sin(a)*r); sc.set(w,top-base,w*(0.7+Math.random()*0.6));
+      q.setFromAxisAngle(_up,Math.random()*Math.PI); m4.compose(p,q,sc); inst.setMatrixAt(i,m4);
+      if(Math.random()<0.25) tops.push(p.x,top+1,p.z);
+    }
+    g.add(inst);
+    const rgeo=new THREE.BufferGeometry(); rgeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(tops),3));
+    const reds=new THREE.Points(rgeo,new THREE.PointsMaterial({size:4,color:0xff3030,map:dotTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:false})); g.add(reds);
+    // サーチライト
+    const beams=[];
+    for(const [x,z,c] of [[-120,-260,0x6fc8ff],[150,-300,0xff7ad0],[20,-420,0xfff0a0]]){
+      const geo=new THREE.ConeGeometry(14,420,24,1,true); geo.translate(0,-210,0);
+      const b=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.07,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false}));
+      b.position.set(x,-40,z); b.rotation.z=Math.PI; g.add(b); beams.push(b);
+    }
+    const st=streaks(80,0xffd9a0,4,30,0.2); g.add(st);
+    let T=0;
+    g.userData.tick=(dt,sp)=>{ T+=dt; beams.forEach((b,i)=>{ b.rotation.z=Math.PI+Math.sin(T*0.4+i*2)*0.5; b.rotation.x=Math.cos(T*0.3+i)*0.3; });
+      reds.material.opacity=Math.sin(T*3)>0?1:0.3; st.userData.tick(dt,sp*2); };
+    return g;
+  },
+  neon(){
+    const g=new THREE.Group(); g.userData.fog=[0x2a0838,40,420];
+    g.add(skyDome([[0,'#05000f'],[0.3,'#1a0438'],[0.46,'#6a1070'],[0.5,'#ff3d8a'],[0.51,'#1a0626'],[1,'#05000a']]));
+    g.add(starField(500,500,800,2.5));
+    const sun=cvTex(512,512,(x,w)=>{ const gr=x.createLinearGradient(0,0,0,w); gr.addColorStop(0,'#ffe45a'); gr.addColorStop(0.55,'#ff7a3a'); gr.addColorStop(1,'#ff2a8a');
+      x.fillStyle=gr; x.beginPath(); x.arc(w/2,w/2,w/2-4,0,Math.PI*2); x.fill();
+      x.globalCompositeOperation='destination-out'; for(let i=0;i<9;i++){ const yy=w*0.55+i*i*3+i*8; x.fillRect(0,yy,w,3+i*1.6); } });
+    const sunM=new THREE.Mesh(new THREE.PlaneGeometry(260,260),new THREE.MeshBasicMaterial({map:sun,transparent:true,fog:false,depthWrite:false}));
+    sunM.position.set(0,70,-700); g.add(sunM);
+    const halo=glowSprite('rgba(255,80,160,.8)',600,0.6); halo.position.set(0,70,-710); g.add(halo);
+    const gridTex=cvTex(256,256,(x,w)=>{ x.fillStyle='#0a0014'; x.fillRect(0,0,w,w); x.strokeStyle='#ff2ad4'; x.lineWidth=5; x.shadowColor='#ff2ad4'; x.shadowBlur=12; x.strokeRect(0,0,w,w); },[160,160]);
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(800,800),new THREE.MeshBasicMaterial({map:gridTex}));
+    floor.rotation.x=-Math.PI/2; floor.position.y=-0.3; g.add(floor);
+    // ワイヤーの山
+    for(const side of [-1,1]){
+      const pg=new THREE.PlaneGeometry(260,500,26,50); const pp=pg.attributes.position;
+      for(let i=0;i<pp.count;i++){ const x=pp.getX(i), d=Math.abs(x+side*130)/130; pp.setZ(i, Math.max(0,(1-d))*(20+Math.random()*45)); }
+      const mtn=new THREE.Mesh(pg,new THREE.MeshBasicMaterial({color:0x2ae8ff,wireframe:true,transparent:true,opacity:0.55}));
+      mtn.rotation.x=-Math.PI/2; mtn.position.set(side*180,-0.3,-300); g.add(mtn);
+    }
+    // 流れてくる光の柱
+    const pillars=[], pgeo=new THREE.BoxGeometry(0.25,7,0.25);
+    for(let i=0;i<16;i++) for(const side of [-1,1]){
+      const m=new THREE.Mesh(pgeo,new THREE.MeshBasicMaterial({color:(i+(side>0?1:0))%2?0x2ae8ff:0xff3dc8}));
+      m.position.set(side*7,3.2,-i*14); g.add(m); pillars.push(m); }
+    g.add(platform(1.2,0xff3dc8,'#150a22'));
+    const st=streaks(150,0xff9ae8,3,20,0.22); g.add(st);
+    g.userData.tick=(dt,sp)=>{ gridTex.offset.y+=dt*sp*0.2; for(const m of pillars){ m.position.z+=dt*sp*2.5; if(m.position.z>6) m.position.z-=16*14; } st.userData.tick(dt,sp*2.5); };
+    return g;
+  },
+};
+const envCache={}; let env=null;
+function setEnv(name){
+  if(!ENV_BUILD[name]) name='space';
+  if(env) stage.remove(env);
+  env=envCache[name]||(envCache[name]=ENV_BUILD[name]());
+  stage.add(env);
+  const f=env.userData.fog; scene.fog=f?new THREE.Fog(f[0],f[1],f[2]):null;
+}
+
+/* ---------- グローブ ---------- */
+function makeGlove(hand){
+  const g=new THREE.Group(), col=COLOR[hand];
+  const leather=new THREE.MeshStandardMaterial({color:col,roughness:0.3,metalness:0.15,emissive:col,emissiveIntensity:0.18});
+  const white=new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.5});
+  const fist=new THREE.Mesh(new THREE.SphereGeometry(0.055,28,20),leather); fist.scale.set(1.0,0.95,1.3); fist.position.z=0.025; g.add(fist);
+  const knuckle=new THREE.Mesh(new THREE.SphereGeometry(0.05,24,16),leather); knuckle.scale.set(1.05,0.9,0.7); knuckle.position.set(0,0.006,-0.03); g.add(knuckle);
+  const thumb=new THREE.Mesh(new THREE.CapsuleGeometry(0.02,0.05,6,12),leather);
+  thumb.rotation.x=Math.PI/2; thumb.rotation.y=hand==='R'?0.3:-0.3; thumb.position.set(hand==='R'?-0.05:0.05,-0.018,0.02); g.add(thumb);
+  const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.047,0.043,0.09,24),leather); cuff.rotation.x=Math.PI/2; cuff.position.set(0,-0.006,0.12); g.add(cuff);
+  const band=new THREE.Mesh(new THREE.CylinderGeometry(0.049,0.049,0.025,24),white); band.rotation.x=Math.PI/2; band.position.set(0,-0.006,0.115); g.add(band);
+  g.visible=false; scene.add(g); return g;
+}
+const fists={ L:makeGlove('L'), R:makeGlove('R') };
+
+/* ---------- 的・障害物 ---------- */
 const mat=(c,o={})=>new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:0.55,roughness:0.4,...o});
-const M={ L:mat(COLOR.L), R:mat(COLOR.R), white:new THREE.MeshBasicMaterial({color:0xffffff}),
-  miss:mat(0x555566,{emissiveIntensity:0.1}), bar:mat(0xff8a2a,{transparent:true,opacity:0.85}),
-  wall:mat(0xffd23a,{transparent:true,opacity:0.4}), fail:mat(0xff2222,{transparent:true,opacity:0.6}) };
-
-const fists={ L:new THREE.Mesh(G_FIST,M.L), R:new THREE.Mesh(G_FIST,M.R) };
-for(const f of Object.values(fists)){ f.visible=false; scene.add(f); }
-
-function arrowRot(mesh, dir){
-  if(dir[0]>0) mesh.rotation.z=-Math.PI/2; else if(dir[0]<0) mesh.rotation.z=Math.PI/2;
-  else if(dir[1]<0) mesh.rotation.z=Math.PI;
+function bullseye(col){
+  const hex='#'+col.toString(16).padStart(6,'0');
+  return cvTex(256,256,(x)=>{
+    const rings=[[124,hex],[104,'#ffffff'],[84,hex],[62,'#ffffff'],[40,hex],[18,'#ffe45a']];
+    for(const [r,c] of rings){ x.fillStyle=c; x.beginPath(); x.arc(128,128,r,0,Math.PI*2); x.fill(); }
+    x.strokeStyle='rgba(0,0,0,.35)'; x.lineWidth=4; x.beginPath(); x.arc(128,128,122,0,Math.PI*2); x.stroke();
+  });
 }
+const PAD={}; for(const h of ['L','R']){ const t=bullseye(COLOR[h]);
+  PAD[h]=[new THREE.MeshStandardMaterial({color:0x2a2d38,metalness:0.6,roughness:0.35}),
+          new THREE.MeshStandardMaterial({map:t,emissiveMap:t,emissive:0xffffff,emissiveIntensity:0.35,roughness:0.5}),
+          new THREE.MeshStandardMaterial({color:0x2a2d38})]; }
+const G_PAD=new THREE.CylinderGeometry(0.13,0.13,0.045,48);
+const G_PADGLOW=new THREE.TorusGeometry(0.135,0.008,8,56);
+const chevron=(dir)=>cvTex(256,512,(x,w,h)=>{
+  x.fillStyle='rgba(255,210,50,.22)'; x.fillRect(0,0,w,h);
+  x.strokeStyle='rgba(255,220,60,.95)'; x.lineWidth=18; x.lineJoin='round';
+  for(let i=0;i<3;i++){ const cy=140+i*120, cx=w/2; x.beginPath();
+    if(dir==='L'){ x.moveTo(cx+40,cy-50); x.lineTo(cx-40,cy); x.lineTo(cx+40,cy+50); } else { x.moveTo(cx-40,cy-50); x.lineTo(cx+40,cy); x.lineTo(cx-40,cy+50); } x.stroke(); }
+  x.strokeStyle='rgba(255,220,60,1)'; x.lineWidth=10; x.strokeRect(5,5,w-10,h-10);
+});
+const M={ white:new THREE.MeshBasicMaterial({color:0xffffff}), miss:mat(0x555566,{emissiveIntensity:0.1}),
+  laser:new THREE.MeshBasicMaterial({color:0xff5a2a}), laserGlow:new THREE.MeshBasicMaterial({color:0xff3a1a,transparent:true,opacity:0.3,blending:THREE.AdditiveBlending,depthWrite:false}),
+  wallL:new THREE.MeshBasicMaterial({map:chevron('L'),transparent:true,side:THREE.DoubleSide,depthWrite:false}),
+  wallR:new THREE.MeshBasicMaterial({map:chevron('R'),transparent:true,side:THREE.DoubleSide,depthWrite:false}),
+  fail:mat(0xff2222,{transparent:true,opacity:0.6}) };
+const G_LASER=new THREE.CylinderGeometry(0.035,0.035,2.6,12), G_LASERGLOW=new THREE.CylinderGeometry(0.11,0.11,2.6,16);
+const G_WALL=new THREE.PlaneGeometry(1.2,2.6), G_BIGARROW=new THREE.ConeGeometry(0.16,0.3,20), G_END=new THREE.SphereGeometry(0.08,12,8);
+const _n=new THREE.Vector3(), _z=new THREE.Vector3(0,0,1);
+
 function makeTargetMesh(ev){
   const g=new THREE.Group();
-  const s=new THREE.Mesh(G_SPHERE,M[ev.hand]); g.add(s); g.userData.body=s;
-  if(ev.type==='straight'){ const r=new THREE.Mesh(G_RING,M.white); r.position.z=0.02; g.add(r); }
-  else { const a=new THREE.Mesh(G_ARROW,M.white); arrowRot(a,ev.dir); a.position.z=0.12; g.add(a); }
+  // 拳が来る方向へ的の面を向ける（右からのフックなら右斜め前を向く）
+  _n.set(-ev.dir[0],-ev.dir[1],-ev.dir[2]); if(ev.type!=='straight') _n.add(_z); _n.normalize();
+  const pad=new THREE.Mesh(G_PAD,PAD[ev.hand]); pad.quaternion.setFromUnitVectors(_up,_n); g.add(pad); g.userData.body=pad;
+  const glow=new THREE.Mesh(G_PADGLOW,new THREE.MeshBasicMaterial({color:COLOR[ev.hand]}));
+  glow.quaternion.setFromUnitVectors(_z,_n); g.add(glow);
   return g;
 }
 function makeObstacleMesh(ev, H){
   const g=new THREE.Group();
   if(ev.kind==='duck'){
-    const b=new THREE.Mesh(G_BAR,M.bar); b.position.y=H+0.05; g.add(b); g.userData.body=b;
+    const core=new THREE.Mesh(G_LASER,M.laser); core.rotation.z=Math.PI/2; core.position.y=H+0.02; g.add(core); g.userData.body=core;
+    const glow=new THREE.Mesh(G_LASERGLOW,M.laserGlow); glow.rotation.z=Math.PI/2; glow.position.y=H+0.02; g.add(glow);
+    for(const x of [-1.3,1.3]){ const e=new THREE.Mesh(G_END,M.laser); e.position.set(x,H+0.02,0); g.add(e); }
     const a=new THREE.Mesh(G_BIGARROW,M.white); a.rotation.z=Math.PI; a.position.set(0,H-0.35,0); g.add(a);
   }else{
     const side=ev.side; // 'L' は左へ傾く＝壁は右側
-    const w=new THREE.Mesh(G_WALL,M.wall); w.position.set(side==='L'?0.55:-0.55,1.3,0); g.add(w); g.userData.body=w;
-    const a=new THREE.Mesh(G_BIGARROW,M.white); a.rotation.z=side==='L'?Math.PI/2:-Math.PI/2;
-    a.position.set(side==='L'?0.15:-0.15,H,0); g.add(a);
+    const w=new THREE.Mesh(G_WALL,side==='L'?M.wallL:M.wallR); w.position.set(side==='L'?0.55:-0.55,1.3,0); g.add(w); g.userData.body=w;
   }
   return g;
+}
+
+/* ---------- 当たったときの火花 ---------- */
+const bursts=[];
+function burstAt(pos,color){
+  const n=26, arr=new Float32Array(n*3), vel=[];
+  for(let i=0;i<n;i++){ arr.set([pos.x,pos.y,pos.z],i*3); vel.push(new THREE.Vector3(Math.random()-0.5,Math.random()-0.3,Math.random()*0.6).normalize().multiplyScalar(1.2+Math.random()*1.8)); }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(arr,3));
+  const p=new THREE.Points(geo,new THREE.PointsMaterial({size:0.04,color,map:dotTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+  stage.add(p); bursts.push({p,vel,born:performance.now()});
+}
+function tickBursts(now,dt){
+  for(let i=bursts.length-1;i>=0;i--){
+    const b=bursts[i], k=(now-b.born)/450, a=b.p.geometry.attributes.position.array;
+    for(let j=0;j<b.vel.length;j++){ a[j*3]+=b.vel[j].x*dt; a[j*3+1]+=b.vel[j].y*dt; a[j*3+2]+=b.vel[j].z*dt; }
+    b.p.geometry.attributes.position.needsUpdate=true; b.p.material.opacity=1-k;
+    if(k>=1){ stage.remove(b.p); b.p.geometry.dispose(); b.p.material.dispose(); bursts.splice(i,1); }
+  }
 }
 
 // 文字パネル
@@ -599,12 +819,11 @@ function buildChart(segments,cfg,lv){
 
 /* ====================== ゲーム本体 ====================== */
 let G=null;
-const _v=new THREE.Vector3(), _q=new THREE.Quaternion(), _qi=new THREE.Quaternion();
 
 function readCfg(){
   const l=store.last;
   const minutes=TEST.get('min')?parseFloat(TEST.get('min')):l.minutes;
-  return { user:l.user, level:l.level, minutes, duration:minutes*60, arm:l.arm, pose:l.pose };
+  return { user:l.user, level:l.level, minutes, duration:minutes*60, arm:l.arm, pose:l.pose, stage:l.stage||'space' };
 }
 function makeSegments(cfg,lv){
   const on=tracks.filter(t=>t.on && decoded.has(t.id));
@@ -627,8 +846,13 @@ function newGame(mode){
       st:{score:0,combo:0,maxCombo:0,hit:0,miss:0,perfect:0,great:0,good:0,dodge:0,dodgeMiss:0,
           total:0} };
   G.st.total=G.chart.length;
+  setEnv(cfg.stage);
+  if(mode==='desk'){ // PC確認用：グローブを手前に置いておく
+    fists.L.position.set(-0.18,1.38,-0.38); fists.R.position.set(0.18,1.38,-0.38);
+    for(const f of Object.values(fists)){ f.quaternion.setFromEuler(new THREE.Euler(-0.2,0,0)); f.visible=true; }
+  }
   for(const a of [...stage.children]) if(a.userData.ev) stage.remove(a);
-  window.__vrbox={G};
+  window.__vrbox={G,THREE,stage,camera,makeTargetMesh,makeObstacleMesh,tokenSpec,setEnv};  // 確認用
   return G;
 }
 function calibrate(head,quat){
@@ -660,6 +884,7 @@ function registerHit(item,dt){
   G.st.hit++; G.st[q.toLowerCase()]++; G.st.combo++; G.st.maxCombo=Math.max(G.st.maxCombo,G.st.combo);
   addScore(q==='PERFECT'?100:q==='GREAT'?70:40);
   popup(q,item.mesh.position.clone().add(_v.set(0,0.18,0))); sfx.hit(q);
+  burstAt(item.mesh.position, q==='PERFECT'?0xffe45a:COLOR[item.ev.hand]);
 }
 function registerMiss(item){
   item.done=true; G.st.miss++; G.st.combo=0;
@@ -677,14 +902,17 @@ function updateHands(frame,now){
   const ref=renderer.xr.getReferenceSpace(), seen={};
   for(const src of frame.session.inputSources){
     const h=src.handedness==='left'?'L':src.handedness==='right'?'R':null; if(!h) continue;
-    let p=null;
-    if(src.hand){ const j=src.hand.get('middle-finger-phalanx-proximal'); const jp=j&&frame.getJointPose(j,ref); if(jp) p=jp.transform.position; }
-    else if(src.gripSpace){ const gp=frame.getPose(src.gripSpace,ref); if(gp) p=gp.transform.position; }
+    let p=null, o=null;
+    if(src.hand){
+      const j=src.hand.get('middle-finger-phalanx-proximal'); const jp=j&&frame.getJointPose(j,ref); if(jp) p=jp.transform.position;
+      const w=src.hand.get('wrist'); const wp=w&&frame.getJointPose(w,ref); if(wp) o=wp.transform.orientation;
+    }
+    else if(src.gripSpace){ const gp=frame.getPose(src.gripSpace,ref); if(gp){ p=gp.transform.position; o=gp.transform.orientation; } }
     if(!p) continue;
     seen[h]=true;
     const hs=G.hands[h]; hs.hist.push({t:now,p:new THREE.Vector3(p.x,p.y,p.z)});
     while(hs.hist.length>2 && now-hs.hist[0].t>70) hs.hist.shift();
-    fists[h].position.set(p.x,p.y,p.z); fists[h].visible=true; hs.lost=0;
+    fists[h].position.set(p.x,p.y,p.z); if(o) fists[h].quaternion.set(o.x,o.y,o.z,o.w); fists[h].visible=true; hs.lost=0;
   }
   for(const h of ['L','R']) if(!seen[h]){ const hs=G.hands[h]; if(!hs.lost) hs.lost=now; if(now-hs.lost>200){ hs.hist=[]; fists[h].visible=false; } }
 }
@@ -808,9 +1036,12 @@ function stopAudio(){
   for(const b of Object.values(BTN)) b.visible=false;
 }
 
+let lastNow=performance.now();
 function loop(time,frame){
+  const now=performance.now(), dt=Math.min(0.05,(now-lastNow)/1000); lastNow=now;
+  if(env && env.userData.tick) env.userData.tick(dt, G && G.phase==='play' && !G.paused ? G.lv.speed : 1.5);
+  tickBursts(now,dt);
   if(!G){ renderer.render(scene,camera); return; }
-  const now=performance.now();
   // 頭の位置
   let quat=_q.identity();
   if(frame){
