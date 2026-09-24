@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VRボクシング</title>
+<style>
+  :root{
+    --bg:#0e1020; --panel:#171a30; --panel2:#1f2340; --line:#2c3158;
+    --text:#eef0ff; --sub:#9aa0c8; --left:#3fa9ff; --right:#ff4f6a;
+    --accent:#ffcc33; --ok:#4cd98a; --hell:#ff5a36;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.6}
+  main{max-width:880px;margin:0 auto;padding:24px 16px 80px}
+  h1{font-size:28px;margin:0 0 4px;letter-spacing:.04em}
+  h1 span{color:var(--left)} h1 b{color:var(--right)}
+  .lead{color:var(--sub);margin:0 0 24px;font-size:14px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  h2{font-size:15px;margin:0 0 10px;color:var(--sub);font-weight:600}
+  .row{display:flex;flex-wrap:wrap;gap:8px}
+  .opt{flex:1 1 120px;min-height:52px;background:var(--panel2);border:2px solid transparent;border-radius:10px;color:var(--text);font-size:16px;font-weight:700;cursor:pointer;padding:8px 10px}
+  .opt small{display:block;font-weight:400;font-size:12px;color:var(--sub)}
+  .opt.on{border-color:var(--accent);background:#2a2d52}
+  .opt.hell.on{border-color:var(--hell)}
+  .user{position:relative}
+  .user .rename{display:block;font-size:11px;font-weight:400;color:var(--sub);text-decoration:underline;cursor:pointer;margin-top:2px}
+  .tracks{list-style:none;margin:0 0 10px;padding:0}
+  .tracks li{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--line);font-size:14px}
+  .tracks li .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tracks input[type=number]{width:72px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px}
+  .tracks button,.small{background:var(--panel2);color:var(--sub);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .note{font-size:13px;color:var(--sub);margin:6px 0 0}
+  .start{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+  .start button{flex:1 1 220px;min-height:64px;border:0;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer}
+  #btnVR{background:linear-gradient(90deg,var(--left),var(--right));color:#fff}
+  #btnVR:disabled{opacity:.35;cursor:not-allowed}
+  #btnDesk{background:var(--panel2);color:var(--text);font-size:15px}
+  #status{font-size:13px;color:var(--sub);min-height:1.4em}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--sub);font-weight:500;font-size:12px}
+  .rk{font-weight:900;font-size:18px}
+  .rk.S{color:var(--accent)} .rk.A{color:var(--ok)} .rk.B{color:var(--left)} .rk.C{color:var(--sub)}
+  .best{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .best div{background:var(--panel2);border-radius:10px;padding:10px;text-align:center}
+  .best .lv{font-size:12px;color:var(--sub)}
+  .best .sc{font-size:18px;font-weight:800}
+  #deskWrap{position:fixed;inset:0;display:none;background:#000;z-index:10}
+  #deskWrap.on{display:block}
+  #deskHelp{position:absolute;left:12px;bottom:12px;color:#ccd;font-size:13px;background:rgba(0,0,0,.55);padding:8px 12px;border-radius:8px}
+  #deskClose{position:absolute;right:12px;top:12px;z-index:2}
+  #result{display:none;position:fixed;inset:0;background:rgba(5,6,15,.85);z-index:20;align-items:center;justify-content:center;padding:16px}
+  #result.on{display:flex}
+  #result .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:380px;width:100%;text-align:center}
+  #result .big{font-size:88px;font-weight:900;line-height:1}
+  #result dl{display:grid;grid-template-columns:1fr auto;gap:4px 12px;text-align:left;margin:18px 0}
+  #result dt{color:var(--sub)} #result dd{margin:0;font-weight:700}
+  #result button{width:100%;min-height:48px;border:0;border-radius:10px;background:var(--panel2);color:var(--text);font-size:16px;cursor:pointer}
+  details{font-size:14px;color:var(--sub)}
+  details summary{cursor:pointer;color:var(--text)}
+  @media (max-width:520px){ .best{grid-template-columns:1fr} }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<main>
+  <h1><span>VR</span><b>ボクシング</b></h1>
+  <p class="lead">Quest 3S のブラウザで開いて、素手で遊びます。足はその場から動かさなくて大丈夫です。</p>
+
+  <section>
+    <h2>だれがやる？</h2>
+    <div class="row" id="users"></div>
+  </section>
+
+  <section>
+    <h2>レベル</h2>
+    <div class="row" id="levels"></div>
+  </section>
+
+  <section>
+    <h2>時間</h2>
+    <div class="row" id="minutes"></div>
+  </section>
+
+  <section>
+    <h2>手</h2>
+    <div class="row" id="arms"></div>
+  </section>
+
+  <section>
+    <h2>姿勢</h2>
+    <div class="row" id="poses"></div>
+  </section>
+
+  <section>
+    <h2>音楽</h2>
+    <ul class="tracks" id="tracks"></ul>
+    <label class="small" style="display:inline-block">曲を追加（mp3）<input type="file" id="fileIn" accept="audio/*" multiple hidden></label>
+    <p class="note">チェックを入れた曲を上から順に流し、時間いっぱいまでくり返します。曲のテンポ（BPM）は自動で測ります。ずれていたら数字を直してください。曲がひとつもなければ、ビート音だけで遊べます。</p>
+  </section>
+
+  <div class="start">
+    <button id="btnVR" disabled>VRで始める</button>
+    <button id="btnDesk">PCで動きを確認する</button>
+  </div>
+  <p id="status"></p>
+
+  <section>
+    <h2 id="recTitle">記録</h2>
+    <div class="best" id="best"></div>
+    <table><thead><tr><th>日時</th><th>レベル</th><th>内容</th><th>スコア</th><th>最大コンボ</th><th>ランク</th></tr></thead><tbody id="recs"></tbody></table>
+  </section>
+
+  <details>
+    <summary>はじめて遊ぶ前に</summary>
+    <p>Quest の「設定 → 動きのトラッキング → ハンドトラッキング」をオンにして、コントローラーを置いてください。手を認識すると、青と赤のグローブが表示されます。</p>
+    <p>青い的は左手、赤い的は右手で打ちます。矢印つきの的は、矢印の方向へ振るフックかアッパーです。オレンジのバーはしゃがんでくぐり、黄色い壁は矢印の方向へ体を傾けてよけます。</p>
+    <p>ランクの目安は、S：ほぼ全部当ててコンボも長い、A：8割以上、B：6割5分以上、C：それ以下です。</p>
+  </details>
+</main>
+
+<div id="deskWrap">
+  <button class="small" id="deskClose">やめる</button>
+  <div id="deskHelp">F＝左パンチ　J＝右パンチ　スペース＝しゃがむ　←→＝体を傾ける</div>
+</div>
+
+<div id="result"><div class="card">
+  <div id="rUser" style="color:var(--sub)"></div>
+  <div class="big" id="rRank"></div>
+  <div id="rBest" style="color:var(--accent);font-weight:700;min-height:1.5em"></div>
+  <dl id="rList"></dl>
+  <button id="rClose">閉じる</button>
+</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+
+const $ = s => document.querySelector(s);
+
+/* ====================== 設定 ====================== */
+const LEVELS = {
+  easy:   { label:'初級', sub:'ゆっくり', travel:2.0,  speed:4.5, beatBpm:110, restEvery:4 },
+  normal: { label:'中級', sub:'ふつう',   travel:1.4,  speed:6.5, beatBpm:128, restEvery:4 },
+  hell:   { label:'地獄', sub:'速い・多い', travel:0.95, speed:9.5, beatBpm:150, restEvery:6 },
+};
+// 16マス＝8拍（1マス＝半拍）
+// J=左ストレート S=右ストレート h=左フック k=右フック u=左アッパー i=右アッパー
+// D=しゃがむ <=左へ傾く >=右へ傾く
+const POOLS = {
+  easy: ['J...S...J...S...','J...J...S.......','J...S...h.......','S...J...k.......',
+         'D.......J...S...','<.......S...J...','>.......J...S...','J...S...u...i...'],
+  normal: ['J.S.J.S.h.k.....','J.J.S...u.i.S...','J.S.h.S.J.S.k...','D...J.S.J.S.....',
+           '<...S.J.>...J.S.','J.S.D...k.h.J.S.','u.i.J.S.h.k.J.S.','J.S.<...S.J.>...'],
+  hell: ['JSJSh.k.JSJSu.i.','J.S.JSh.D...JSkh','<...JS>...SJ.JSJ','JSu.JSi.D...hkhk',
+         'JSJS<...kSJ.>...','hkhkJSJSD...uiJS','JSJSJSJSD...JSJS','<...JSJS>...SJSJ'],
+};
+const COLOR = { L:0x3fa9ff, R:0xff4f6a };
+const HIT_R = 0.2;          // 拳と的の当たり判定の距離(m)
+const PUNCH_V = 0.6;        // パンチとみなす拳の速さ(m/s)
+const TEST = new URLSearchParams(location.search);
+
+/* ====================== 記録の保存 ====================== */
+const STORE_KEY = 'vrbox.v1';
+function defaultStore(){
+  return { users:[1,2,3,4].map(n=>({id:'u'+n,name:'ユーザー'+n})), records:{},
+           last:{ user:'u1', level:'easy', minutes:5, arm:'both', pose:'stand' } };
+}
+function loadStore(){
+  try{ const s = JSON.parse(localStorage.getItem(STORE_KEY)); if(s && s.users) return s; }catch(e){}
+  return defaultStore();
+}
+function saveStore(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){} }
+let store = loadStore();
+
+/* ====================== 画面（2D） ====================== */
+function opt(parent, items, key, cls=''){
+  parent.innerHTML='';
+  for(const [val,label,sub] of items){
+    const b=document.createElement('button');
+    b.className='opt '+cls+(val==='hell'?' hell':'')+(store.last[key]===val?' on':'');
+    b.innerHTML=label+(sub?`<small>${sub}</small>`:'');
+    b.onclick=()=>{ store.last[key]=val; saveStore(); renderAll(); };
+    parent.appendChild(b);
+  }
+}
+function renderUsers(){
+  const box=$('#users'); box.innerHTML='';
+  for(const u of store.users){
+    const b=document.createElement('button');
+    b.className='opt user'+(store.last.user===u.id?' on':'');
+    b.textContent=u.name;
+    const r=document.createElement('span'); r.className='rename'; r.textContent='名前を変更';
+    r.onclick=e=>{ e.stopPropagation(); const n=prompt('名前',u.name); if(n&&n.trim()){ u.name=n.trim().slice(0,12); saveStore(); renderAll(); } };
+    b.appendChild(r);
+    b.onclick=()=>{ store.last.user=u.id; saveStore(); renderAll(); };
+    box.appendChild(b);
+  }
+}
+const ARM_LABEL={both:'両手',L:'片手（左）',R:'片手（右）'};
+const POSE_LABEL={stand:'立って',sit:'座ったまま'};
+function renderRecords(){
+  const u=store.users.find(x=>x.id===store.last.user);
+  $('#recTitle').textContent=`${u.name} の記録`;
+  const recs=(store.records[u.id]||[]);
+  const best=$('#best'); best.innerHTML='';
+  for(const k of Object.keys(LEVELS)){
+    const top=recs.filter(r=>r.level===k).sort((a,b)=>b.score-a.score)[0];
+    best.innerHTML+=`<div><div class="lv">${LEVELS[k].label} の自己ベスト</div>`+
+      (top?`<div class="sc">${top.score.toLocaleString()}</div><div class="rk ${top.rank}">${top.rank}</div>`:'<div class="sc">―</div>')+'</div>';
+  }
+  const tb=$('#recs'); tb.innerHTML='';
+  for(const r of recs.slice(-15).reverse()){
+    const d=new Date(r.at);
+    tb.innerHTML+=`<tr><td>${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</td>`+
+      `<td>${LEVELS[r.level].label}</td><td>${r.minutes}分・${ARM_LABEL[r.arm]}・${POSE_LABEL[r.pose]}</td>`+
+      `<td>${r.score.toLocaleString()}</td><td>${r.maxCombo}</td><td class="rk ${r.rank}">${r.rank}</td></tr>`;
+  }
+  if(!recs.length) tb.innerHTML='<tr><td colspan="6" style="color:var(--sub)">まだ記録がありません</td></tr>';
+}
+function renderAll(){
+  renderUsers();
+  opt($('#levels'), Object.entries(LEVELS).map(([k,v])=>[k,v.label,v.sub]), 'level');
+  opt($('#minutes'), [[5,'5分'],[7,'7分'],[10,'10分']], 'minutes');
+  opt($('#arms'), [['both','両手'],['L','片手（左）'],['R','片手（右）']], 'arm');
+  opt($('#poses'), [['stand','立って'],['sit','座ったまま','しゃがみ・傾きが浅くなります']], 'pose');
+  renderTracks(); renderRecords();
+}
+
+/* ====================== 音楽（保存・テンポ測定） ====================== */
+let actx=null, masterGain, musicGain, sfxGain;
+function ac(){
+  if(!actx){
+    actx=new (window.AudioContext||window.webkitAudioContext)();
+    masterGain=actx.createGain(); masterGain.connect(actx.destination);
+    musicGain=actx.createGain(); musicGain.gain.value=0.8; musicGain.connect(masterGain);
+    sfxGain=actx.createGain(); sfxGain.gain.value=0.9; sfxGain.connect(masterGain);
+  }
+  return actx;
+}
+function idb(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open('vrbox-music',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('tracks',{keyPath:'id'});
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+async function dbDo(mode, fn){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('tracks',mode); const st=tx.objectStore('tracks');
+    const r=fn(st); tx.oncomplete=()=>res(r&&r.result); tx.onerror=()=>rej(tx.error);
+  });
+}
+let tracks=[];                 // {id,name,bpm,offset,on,order}
+const decoded=new Map();       // id -> AudioBuffer
+async function loadTracks(){
+  try{
+    const all=await dbDo('readonly', st=>st.getAll());
+    tracks=(all||[]).map(({data,...m})=>m).sort((a,b)=>a.order-b.order);
+  }catch(e){ tracks=[]; }
+  renderTracks();
+  for(const t of tracks) if(t.on) ensureDecoded(t.id);
+}
+async function ensureDecoded(id){
+  if(decoded.has(id)) return decoded.get(id);
+  const rec=await dbDo('readonly', st=>st.get(id));
+  const buf=await ac().decodeAudioData(rec.data.slice(0));
+  decoded.set(id,buf); updateReady(); return buf;
+}
+function renderTracks(){
+  const ul=$('#tracks'); ul.innerHTML='';
+  for(const t of tracks){
+    const li=document.createElement('li');
+    li.innerHTML=`<input type="checkbox" ${t.on?'checked':''}><span class="nm"></span>BPM <input type="number" step="0.1" min="60" max="200" value="${t.bpm}"><button>削除</button>`;
+    li.querySelector('.nm').textContent=t.name;
+    const [cb,bpm]=li.querySelectorAll('input');
+    cb.onchange=async()=>{ t.on=cb.checked; await putMeta(t); if(t.on) ensureDecoded(t.id); updateReady(); };
+    bpm.onchange=async()=>{
+      const v=parseFloat(bpm.value); if(!(v>=60&&v<=200)) return;
+      const buf=await ensureDecoded(t.id);
+      const r=analyzeTempo(buf, v); t.bpm=r.bpm; t.offset=r.offset; await putMeta(t);
+    };
+    li.querySelector('button').onclick=async()=>{
+      if(!confirm(`「${t.name}」をリストから外しますか？`)) return;
+      await dbDo('readwrite', st=>st.delete(t.id)); decoded.delete(t.id);
+      tracks=tracks.filter(x=>x!==t); renderTracks(); updateReady();
+    };
+    ul.appendChild(li);
+  }
+  if(!tracks.length) ul.innerHTML='<li style="color:var(--sub)">曲なし（ビート音で遊びます）</li>';
+}
+async function putMeta(t){
+  const rec=await dbDo('readonly', st=>st.get(t.id));
+  await dbDo('readwrite', st=>st.put({...rec, ...t}));
+}
+$('#fileIn').onchange=async e=>{
+  const files=[...e.target.files]; e.target.value='';
+  for(const f of files){
+    setStatus(`「${f.name}」のテンポを測っています…`);
+    try{
+      const data=await f.arrayBuffer();
+      const buf=await ac().decodeAudioData(data.slice(0));
+      const {bpm,offset}=analyzeTempo(buf);
+      const t={id:'t'+Date.now()+Math.random().toString(36).slice(2,6), name:f.name.replace(/\.[^.]+$/,''),
+               bpm, offset, on:true, order:Date.now()};
+      await dbDo('readwrite', st=>st.put({...t,data}));
+      decoded.set(t.id,buf); tracks.push(t);
+    }catch(err){ setStatus(`「${f.name}」を読み込めませんでした`); console.error(err); }
+  }
+  renderTracks(); updateReady(); setStatus('');
+};
+
+// 曲のテンポ（BPM）と、1拍目の位置を測る
+function analyzeTempo(buffer, fixedBpm){
+  const sr=buffer.sampleRate, hop=256;
+  const c0=buffer.getChannelData(0), c1=buffer.numberOfChannels>1?buffer.getChannelData(1):c0;
+  const n=Math.floor(c0.length/hop), fps=sr/hop;
+  const env=new Float32Array(n);
+  const k=1-Math.exp(-2*Math.PI*150/sr); let lp=0;
+  for(let i=0;i<n;i++){
+    let eF=0,eL=0;
+    for(let j=i*hop,e=j+hop;j<e;j++){ const m=(c0[j]+c1[j])*0.5; lp+=(m-lp)*k; eF+=m*m; eL+=lp*lp; }
+    env[i]=Math.log(1+1000*eF/hop)+2*Math.log(1+1000*eL/hop);
+  }
+  const on=new Float32Array(n);
+  for(let i=1;i<n;i++) on[i]=Math.max(0,env[i]-env[i-1]);
+  // 拍の並びにどれだけ合うかを採点
+  const comb=(bpm)=>{
+    const per=fps*60/bpm; let best=-1,bp=0;
+    for(let p=0;p<per;p++){
+      let s=0; for(let x=p;x<n;x+=per) s+=on[Math.round(x)]||0;
+      if(s>best){best=s;bp=p;}
+    }
+    return {score:best/(n/per), phase:bp};
+  };
+  let bpm=fixedBpm;
+  if(!bpm){
+    let bestB=120,bestS=-1;
+    for(let L=Math.floor(fps*60/180);L<=Math.ceil(fps*60/80);L++){
+      let s=0; for(let i=0;i+L<n;i++) s+=on[i]*on[i+L];
+      const b=fps*60/L, w=Math.exp(-0.5*Math.pow(Math.log2(b/125)/0.7,2));
+      if(s*w>bestS){bestS=s*w;bestB=b;}
+    }
+    let fine=bestB,fs=-1;
+    for(let b=bestB-3;b<=bestB+3;b+=0.05){ const r=comb(b); if(r.score>fs){fs=r.score;fine=b;} }
+    bpm=Math.round(fine*10)/10;
+  }
+  const {phase}=comb(bpm);
+  return {bpm, offset:phase/fps};
+}
+
+function setStatus(s){ $('#status').textContent=s; }
+let xrOK=false;
+function updateReady(){
+  const need=tracks.filter(t=>t.on);
+  const waiting=need.filter(t=>!decoded.has(t.id)).length;
+  $('#btnVR').disabled=!xrOK || waiting>0;
+  if(waiting) setStatus(`曲を準備しています（あと${waiting}曲）…`);
+  else if(!xrOK) setStatus('この端末ではVRが使えません。Quest のブラウザで開いてください（PCでは動きの確認だけできます）。');
+  else setStatus('');
+}
+if(navigator.xr){ navigator.xr.isSessionSupported('immersive-vr').then(ok=>{ xrOK=ok; updateReady(); }).catch(()=>updateReady()); }
+else updateReady();
+
+/* ====================== 3D ====================== */
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2,devicePixelRatio));
+renderer.setSize(innerWidth,innerHeight);
+renderer.xr.enabled=true;
+renderer.xr.setReferenceSpaceType('local-floor');
+$('#deskWrap').appendChild(renderer.domElement);
+addEventListener('resize',()=>{ if(renderer.xr.isPresenting) return; camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0b0d17);
+scene.fog=new THREE.Fog(0x0b0d17,7,18);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.03,60);
+camera.position.set(0,1.6,0);
+scene.add(new THREE.HemisphereLight(0xdde4ff,0x202040,1.3));
+const dl=new THREE.DirectionalLight(0xffffff,1.2); dl.position.set(1,3,2); scene.add(dl);
+
+const stage=new THREE.Group(); scene.add(stage);
+const grid=new THREE.GridHelper(40,80,0x3355ff,0x1a2046); scene.add(grid);
+{ // 床の足元マーク（ここから動かない）
+  const ring=new THREE.Mesh(new THREE.RingGeometry(0.35,0.4,48),new THREE.MeshBasicMaterial({color:0xffcc33,transparent:true,opacity:0.6}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=0.005; stage.add(ring);
+  const laneMat=new THREE.MeshBasicMaterial({color:0x5566ff,transparent:true,opacity:0.35});
+  for(const x of [-0.9,0.9]){ const l=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.02,20),laneMat); l.position.set(x,0.01,-10); stage.add(l); }
+}
+
+// 共有する形と色
+const G_SPHERE=new THREE.SphereGeometry(0.11,24,16);
+const G_RING=new THREE.TorusGeometry(0.14,0.012,8,40);
+const G_ARROW=new THREE.ConeGeometry(0.055,0.11,16);
+const G_FIST=new THREE.SphereGeometry(0.05,16,12);
+const G_BAR=new THREE.BoxGeometry(2.4,0.3,0.12);
+const G_WALL=new THREE.BoxGeometry(1.2,2.6,0.05);
+const G_BIGARROW=new THREE.ConeGeometry(0.16,0.3,20);
+const mat=(c,o={})=>new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:0.55,roughness:0.4,...o});
+const M={ L:mat(COLOR.L), R:mat(COLOR.R), white:new THREE.MeshBasicMaterial({color:0xffffff}),
+  miss:mat(0x555566,{emissiveIntensity:0.1}), bar:mat(0xff8a2a,{transparent:true,opacity:0.85}),
+  wall:mat(0xffd23a,{transparent:true,opacity:0.4}), fail:mat(0xff2222,{transparent:true,opacity:0.6}) };
+
+const fists={ L:new THREE.Mesh(G_FIST,M.L), R:new THREE.Mesh(G_FIST,M.R) };
+for(const f of Object.values(fists)){ f.visible=false; scene.add(f); }
+
+function arrowRot(mesh, dir){
+  if(dir[0]>0) mesh.rotation.z=-Math.PI/2; else if(dir[0]<0) mesh.rotation.z=Math.PI/2;
+  else if(dir[1]<0) mesh.rotation.z=Math.PI;
+}
+function makeTargetMesh(ev){
+  const g=new THREE.Group();
+  const s=new THREE.Mesh(G_SPHERE,M[ev.hand]); g.add(s); g.userData.body=s;
+  if(ev.type==='straight'){ const r=new THREE.Mesh(G_RING,M.white); r.position.z=0.02; g.add(r); }
+  else { const a=new THREE.Mesh(G_ARROW,M.white); arrowRot(a,ev.dir); a.position.z=0.12; g.add(a); }
+  return g;
+}
+function makeObstacleMesh(ev, H){
+  const g=new THREE.Group();
+  if(ev.kind==='duck'){
+    const b=new THREE.Mesh(G_BAR,M.bar); b.position.y=H+0.05; g.add(b); g.userData.body=b;
+    const a=new THREE.Mesh(G_BIGARROW,M.white); a.rotation.z=Math.PI; a.position.set(0,H-0.35,0); g.add(a);
+  }else{
+    const side=ev.side; // 'L' は左へ傾く＝壁は右側
+    const w=new THREE.Mesh(G_WALL,M.wall); w.position.set(side==='L'?0.55:-0.55,1.3,0); g.add(w); g.userData.body=w;
+    const a=new THREE.Mesh(G_BIGARROW,M.white); a.rotation.z=side==='L'?Math.PI/2:-Math.PI/2;
+    a.position.set(side==='L'?0.15:-0.15,H,0); g.add(a);
+  }
+  return g;
+}
+
+// 文字パネル
+function canvasPlane(w,h,cw,ch){
+  const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+  m.renderOrder=10; return {mesh:m,cv,ctx:cv.getContext('2d'),tex};
+}
+const hud=canvasPlane(2.0,1.0,1024,512); stage.add(hud.mesh);
+function hudDraw(lines){
+  const {ctx,cv,tex}=hud; ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle='rgba(10,12,30,0.55)'; ctx.beginPath(); ctx.roundRect(0,0,cv.width,cv.height,40); ctx.fill();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const l of lines){ ctx.font=`bold ${l.size}px system-ui,sans-serif`; ctx.fillStyle=l.color||'#fff'; ctx.fillText(l.text,l.x??512,l.y); }
+  tex.needsUpdate=true;
+}
+const WORDS={ PERFECT:'#ffd23a', GREAT:'#4cd98a', GOOD:'#3fa9ff', MISS:'#888', 'NICE!':'#4cd98a', '×':'#ff4040' };
+const wordTex={};
+for(const [w,c] of Object.entries(WORDS)){
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=96; const x=cv.getContext('2d');
+  x.font='bold 64px system-ui,sans-serif'; x.textAlign='center'; x.textBaseline='middle';
+  x.lineWidth=8; x.strokeStyle='rgba(0,0,0,.6)'; x.strokeText(w,128,48); x.fillStyle=c; x.fillText(w,128,48);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; wordTex[w]=t;
+}
+const popups=[];
+function popup(word,pos){
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:wordTex[word],transparent:true,depthTest:false}));
+  sp.scale.set(0.36,0.135,1); sp.position.copy(pos); sp.renderOrder=20; stage.add(sp);
+  popups.push({sp,born:performance.now()});
+}
+
+/* ====================== 効果音・ビート ====================== */
+let noiseBuf=null;
+function noise(){ if(noiseBuf) return noiseBuf; const c=ac(); noiseBuf=c.createBuffer(1,c.sampleRate*0.3,c.sampleRate);
+  const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return noiseBuf; }
+function tone(t,f0,f1,dur,vol,type='sine',dest=sfxGain){
+  const c=ac(), o=c.createOscillator(), g=c.createGain(); o.type=type;
+  o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g).connect(dest); o.start(t); o.stop(t+dur+0.02);
+}
+function burst(t,dur,vol,freq,dest=sfxGain){
+  const c=ac(), n=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
+  n.buffer=noise(); f.type='highpass'; f.frequency.value=freq;
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  n.connect(f).connect(g).connect(dest); n.start(t); n.stop(t+dur+0.02);
+}
+const sfx={
+  hit(q){ const t=ac().currentTime; tone(t,220,70,0.12,0.7); burst(t,0.05,q==='PERFECT'?0.5:0.3,1800); },
+  miss(){ const t=ac().currentTime; tone(t,120,80,0.15,0.25,'square'); },
+  dodge(){ const t=ac().currentTime; burst(t,0.25,0.25,600); },
+};
+function beatAt(t,i){ // ビート音（曲なしのとき）
+  tone(t,150,45,0.18,0.9,'sine',musicGain);
+  if(i%2===1) burst(t,0.12,0.35,1200,musicGain);
+  burst(t+(60/G.lv.beatBpm)/2,0.03,0.18,7000,musicGain);
+}
+
+/* ====================== 譜面をつくる ====================== */
+function tokenSpec(c,cfg){
+  if(c==='D') return {kind:'duck'};
+  if(c==='<') return {kind:'lean',side:'L'};
+  if(c==='>') return {kind:'lean',side:'R'};
+  const one=cfg.arm!=='both';
+  if(!one){
+    switch(c){
+      case 'J': return {kind:'punch',hand:'L',type:'straight',pos:[-0.13,-0.18,-0.45],dir:[0,0,-1]};
+      case 'S': return {kind:'punch',hand:'R',type:'straight',pos:[ 0.13,-0.18,-0.45],dir:[0,0,-1]};
+      case 'h': return {kind:'punch',hand:'L',type:'hook',pos:[-0.2,-0.15,-0.4],dir:[1,0,0]};
+      case 'k': return {kind:'punch',hand:'R',type:'hook',pos:[ 0.2,-0.15,-0.4],dir:[-1,0,0]};
+      case 'u': return {kind:'punch',hand:'L',type:'upper',pos:[-0.12,-0.38,-0.38],dir:[0,1,0]};
+      case 'i': return {kind:'punch',hand:'R',type:'upper',pos:[ 0.12,-0.38,-0.38],dir:[0,1,0]};
+    }
+  }else{
+    const h=cfg.arm, sx=h==='L'?-1:1;
+    switch(c){
+      case 'J': return {kind:'punch',hand:h,type:'straight',pos:[sx*0.06,-0.15,-0.45],dir:[0,0,-1]};
+      case 'S': return {kind:'punch',hand:h,type:'straight',pos:[sx*0.18,-0.22,-0.45],dir:[0,0,-1]};
+      case 'h': case 'k': return {kind:'punch',hand:h,type:'hook',pos:[sx*0.22,-0.15,-0.4],dir:[-sx,0,0]};
+      case 'u': case 'i': return {kind:'punch',hand:h,type:'upper',pos:[sx*0.12,-0.38,-0.38],dir:[0,1,0]};
+    }
+  }
+  return null;
+}
+function buildChart(segments,cfg,lv){
+  const evs=[], leadIn=lv.travel+2.5, endCut=cfg.duration-2.5, pool=POOLS[cfg.level];
+  let phrase=0, prevEnd=-1;
+  for(const seg of segments){
+    const spb=60/seg.bpm, beats=[];
+    for(let t=seg.start+seg.offset; t<seg.start+seg.dur-1.5; t+=spb) beats.push(t);
+    for(let b=0;b+8<=beats.length;b+=8){
+      if(beats[b]<leadIn || beats[b+7]+spb>endCut) continue;
+      phrase++;
+      if(phrase%lv.restEvery===0) continue; // 休憩の8拍
+      let pat=pool[Math.floor(Math.random()*pool.length)];
+      // 障害物で始まる型は、直前が詰まっていたら避ける
+      if('D<>'.includes(pat[0]) && beats[b]-prevEnd<spb*1.5) pat=pool[0];
+      for(let s=0;s<16;s++){
+        const c=pat[s]; if(c==='.') continue;
+        const isPunch=!'D<>'.includes(c);
+        if(cfg.arm!=='both' && isPunch && s%2===1) continue;  // 片手は半拍を間引く
+        const spec=tokenSpec(c,cfg); if(!spec) continue;
+        const time=beats[b+(s>>1)]+(s&1)*spb/2;
+        evs.push({...spec,time}); prevEnd=time;
+      }
+    }
+  }
+  return evs.sort((a,b)=>a.time-b.time);
+}
+
+/* ====================== ゲーム本体 ====================== */
+let G=null;
+const _v=new THREE.Vector3(), _q=new THREE.Quaternion(), _qi=new THREE.Quaternion();
+
+function readCfg(){
+  const l=store.last;
+  const minutes=TEST.get('min')?parseFloat(TEST.get('min')):l.minutes;
+  return { user:l.user, level:l.level, minutes, duration:minutes*60, arm:l.arm, pose:l.pose };
+}
+function makeSegments(cfg,lv){
+  const on=tracks.filter(t=>t.on && decoded.has(t.id));
+  if(!on.length) return [{start:0,dur:cfg.duration,bpm:lv.beatBpm,offset:0.5,builtin:true}];
+  const segs=[]; let t=0, i=0;
+  while(t<cfg.duration-5){
+    const tr=on[i%on.length], buf=decoded.get(tr.id);
+    const dur=Math.min(buf.duration,cfg.duration-t);
+    segs.push({start:t,dur,bpm:tr.bpm,offset:tr.offset,buf}); t+=buf.duration+1; i++;
+  }
+  return segs;
+}
+function newGame(mode){
+  const cfg=readCfg(), lv=LEVELS[cfg.level];
+  const segs=makeSegments(cfg,lv);
+  G={ mode, cfg, lv, segs, chart:buildChart(segs,cfg,lv), idx:0, active:[], phase:'calib',
+      calibStart:performance.now(), H:1.6, t0:0, sources:[], beatIdx:0, hudNext:0,
+      hands:{L:{hist:[],lost:0},R:{hist:[],lost:0}}, head:new THREE.Vector3(0,1.6,0),
+      desk:{duckUntil:0,leanUntil:0,lean:0},
+      st:{score:0,combo:0,maxCombo:0,hit:0,miss:0,perfect:0,great:0,good:0,dodge:0,dodgeMiss:0,
+          total:0} };
+  G.st.total=G.chart.length;
+  for(const a of [...stage.children]) if(a.userData.ev) stage.remove(a);
+  window.__vrbox={G};
+  return G;
+}
+function calibrate(head,quat){
+  _v.set(0,0,-1).applyQuaternion(quat);
+  const yaw=Math.atan2(-_v.x,-_v.z);
+  stage.position.set(head.x,0,head.z); stage.rotation.set(0,yaw,0); stage.updateMatrixWorld();
+  G.H=head.y;
+}
+function startPlay(){
+  const c=ac(); G.phase='play';
+  G.t0=c.currentTime+1.0;
+  const fadeAt=G.t0+G.cfg.duration;
+  for(const s of G.segs){
+    if(s.builtin) continue;
+    const src=c.createBufferSource(); src.buffer=s.buf; src.connect(musicGain);
+    src.start(G.t0+s.start); src.stop(Math.min(G.t0+s.start+s.buf.duration, fadeAt+1));
+    G.sources.push(src);
+  }
+  musicGain.gain.cancelScheduledValues(c.currentTime);
+  musicGain.gain.setValueAtTime(0.8,c.currentTime);
+  musicGain.gain.setValueAtTime(0.8,fadeAt-2); musicGain.gain.linearRampToValueAtTime(0.0001,fadeAt);
+}
+function gameTime(){ const c=ac(); return c.currentTime-G.t0-(c.outputLatency||0); }
+
+function judge(dt){ const a=Math.abs(dt); return a<=0.07?'PERFECT':a<=0.14?'GREAT':'GOOD'; }
+function addScore(base){ const mult=1+Math.min(G.st.combo,100)/100; G.st.score+=Math.round(base*mult); }
+function registerHit(item,dt){
+  const q=judge(dt); item.done=true; item.hitAt=performance.now();
+  G.st.hit++; G.st[q.toLowerCase()]++; G.st.combo++; G.st.maxCombo=Math.max(G.st.maxCombo,G.st.combo);
+  addScore(q==='PERFECT'?100:q==='GREAT'?70:40);
+  popup(q,item.mesh.position.clone().add(_v.set(0,0.18,0))); sfx.hit(q);
+}
+function registerMiss(item){
+  item.done=true; G.st.miss++; G.st.combo=0;
+  if(item.mesh.userData.body) item.mesh.userData.body.material=M.miss;
+  popup('MISS',item.mesh.position.clone().add(_v.set(0,0.18,0))); sfx.miss();
+}
+function obstacleOK(ev,head){
+  const sit=G.cfg.pose==='sit';
+  if(ev.kind==='duck') return head.y < G.H-(sit?0.12:0.22);
+  const d=sit?0.12:0.17;
+  return ev.side==='L' ? head.x < -d : head.x > d;
+}
+
+function updateHands(frame,now){
+  const ref=renderer.xr.getReferenceSpace(), seen={};
+  for(const src of frame.session.inputSources){
+    const h=src.handedness==='left'?'L':src.handedness==='right'?'R':null; if(!h) continue;
+    let p=null;
+    if(src.hand){ const j=src.hand.get('middle-finger-phalanx-proximal'); const jp=j&&frame.getJointPose(j,ref); if(jp) p=jp.transform.position; }
+    else if(src.gripSpace){ const gp=frame.getPose(src.gripSpace,ref); if(gp) p=gp.transform.position; }
+    if(!p) continue;
+    seen[h]=true;
+    const hs=G.hands[h]; hs.hist.push({t:now,p:new THREE.Vector3(p.x,p.y,p.z)});
+    while(hs.hist.length>2 && now-hs.hist[0].t>70) hs.hist.shift();
+    fists[h].position.set(p.x,p.y,p.z); fists[h].visible=true; hs.lost=0;
+  }
+  for(const h of ['L','R']) if(!seen[h]){ const hs=G.hands[h]; if(!hs.lost) hs.lost=now; if(now-hs.lost>200){ hs.hist=[]; fists[h].visible=false; } }
+}
+function handState(h){ // ステージ座標での位置と速度
+  const hs=G.hands[h].hist; if(hs.length<2) return null;
+  const a=hs[0], b=hs[hs.length-1], dt=(b.t-a.t)/1000; if(dt<=0) return null;
+  const pos=stage.worldToLocal(b.p.clone());
+  const vel=b.p.clone().sub(a.p).divideScalar(dt).applyQuaternion(_qi.copy(stage.quaternion).invert());
+  return {pos,vel};
+}
+
+function tick(t,now){
+  const {lv,cfg}=G;
+  // 出現
+  while(G.idx<G.chart.length && G.chart[G.idx].time-lv.travel<=t){
+    const ev=G.chart[G.idx++];
+    const mesh=ev.kind==='punch'?makeTargetMesh(ev):makeObstacleMesh(ev,G.H);
+    mesh.userData.ev=ev; stage.add(mesh);
+    G.active.push({ev,mesh,done:false,ok:false});
+  }
+  const head=stage.worldToLocal(G.head.clone());
+  const hs={L:null,R:null};
+  if(G.mode==='xr'){ hs.L=handState('L'); hs.R=handState('R'); }
+
+  for(const it of G.active){
+    const ev=it.ev, dz=(ev.time-t)*lv.speed;
+    if(ev.kind==='punch'){
+      const hitZ=ev.pos[2];
+      if(!it.hitAt) it.mesh.position.set(ev.pos[0],G.H+ev.pos[1],hitZ-dz);
+      if(it.done) continue;
+      if(G.mode==='xr'){
+        const s=hs[ev.hand];
+        if(s && s.pos.distanceTo(it.mesh.position)<HIT_R){
+          const along=s.vel.x*ev.dir[0]+s.vel.y*ev.dir[1]+s.vel.z*ev.dir[2];
+          if(along>PUNCH_V) registerHit(it,t-ev.time);
+        }
+      }else if(G.desk.auto && Math.abs(t-ev.time)<0.02) registerHit(it,t-ev.time);
+      if(!it.done && it.mesh.position.z>hitZ+0.3) registerMiss(it);
+    }else{
+      it.mesh.position.z=-dz;
+      if(it.done) continue;
+      if(G.mode==='desk' && G.desk.auto && Math.abs(t-ev.time)<0.4){
+        if(ev.kind==='duck') G.desk.duckUntil=now+200; else { G.desk.lean=ev.side==='L'?-1:1; G.desk.leanUntil=now+200; }
+      }
+      if(t>ev.time-0.15 && obstacleOK(ev,head)) it.ok=true;
+      if(t>ev.time+0.1){
+        it.done=true;
+        if(it.ok){ G.st.dodge++; G.st.combo++; G.st.maxCombo=Math.max(G.st.maxCombo,G.st.combo); addScore(60);
+          popup('NICE!',_v.set(0,G.H+0.35,-0.6).clone()); sfx.dodge(); }
+        else { G.st.dodgeMiss++; G.st.combo=0; it.mesh.userData.body.material=M.fail;
+          popup('×',_v.set(0,G.H+0.35,-0.6).clone()); sfx.miss(); }
+      }
+    }
+  }
+  // 片づけ
+  G.active=G.active.filter(it=>{
+    let gone=it.mesh.position.z>1.5;
+    if(it.hitAt){ const k=(now-it.hitAt)/180; it.mesh.scale.setScalar(1+k*0.8); gone=k>=1; }
+    if(gone) stage.remove(it.mesh);
+    return !gone;
+  });
+}
+
+function hudPlay(t,now){
+  if(now<G.hudNext) return; G.hudNext=now+150;
+  const left=Math.max(0,G.cfg.duration-t), m=Math.floor(left/60), s=Math.floor(left%60);
+  const lines=[
+    {text:`${m}:${String(s).padStart(2,'0')}`,size:72,x:190,y:90},
+    {text:G.st.score.toLocaleString(),size:72,x:834,y:90,color:'#ffd23a'},
+    {text:G.lv.label+(G.cfg.arm!=='both'?`・片手`:'')+(G.cfg.pose==='sit'?'・座り':''),size:40,x:512,y:90,color:'#9aa0c8'},
+  ];
+  if(G.st.combo>=2){ lines.push({text:String(G.st.combo),size:190,y:290}); lines.push({text:'COMBO',size:56,y:430,color:'#9aa0c8'}); }
+  if(t<0) lines.push({text:'スタート！',size:120,y:290,color:'#4cd98a'});
+  hudDraw(lines);
+}
+
+function rankOf(st){
+  const total=st.total||1, acc=(st.hit+st.dodge)/total;
+  const v=acc*0.85+Math.min(1,st.maxCombo/total)*0.15;
+  return { rank: v>=0.92?'S':v>=0.8?'A':v>=0.65?'B':'C', acc };
+}
+function finish(){
+  G.phase='result';
+  const st=G.st, {rank,acc}=rankOf(st), cfg=G.cfg;
+  const recs=store.records[cfg.user]||(store.records[cfg.user]=[]);
+  const prevBest=Math.max(0,...recs.filter(r=>r.level===cfg.level).map(r=>r.score));
+  const rec={at:new Date().toISOString(),level:cfg.level,minutes:cfg.minutes,arm:cfg.arm,pose:cfg.pose,
+    score:st.score,rank,acc:Math.round(acc*1000)/10,maxCombo:st.maxCombo,punches:st.hit,
+    hits:st.hit+st.dodge,total:st.total,perfect:st.perfect};
+  recs.push(rec); saveStore(); renderRecords();
+  G.result={...rec,newBest:st.score>prevBest};
+  for(const it of G.active) stage.remove(it.mesh); G.active=[];
+  const R={S:'#ffd23a',A:'#4cd98a',B:'#3fa9ff',C:'#9aa0c8'};
+  const lines=[
+    {text:'ランク',size:44,x:230,y:80,color:'#9aa0c8'},
+    {text:rank,size:260,x:230,y:270,color:R[rank]},
+    {text:`スコア ${st.score.toLocaleString()}`,size:54,x:700,y:110},
+    {text:`命中 ${rec.hits}/${st.total}（${rec.acc}%）`,size:44,x:700,y:200},
+    {text:`最大コンボ ${st.maxCombo}`,size:44,x:700,y:280},
+    {text:`パンチ ${st.hit}発`,size:44,x:700,y:360},
+  ];
+  if(G.result.newBest) lines.push({text:'自己ベスト更新！',size:48,x:512,y:460,color:'#ffd23a'});
+  hudDraw(lines);
+  showResult();
+  G.endAt=performance.now()+15000;
+}
+function showResult(){
+  const r=G.result, u=store.users.find(x=>x.id===G.cfg.user);
+  $('#rUser').textContent=`${u.name}・${LEVELS[r.level].label}・${r.minutes}分`;
+  $('#rRank').textContent=r.rank; $('#rRank').className='big rk '+r.rank;
+  $('#rBest').textContent=r.newBest?'自己ベスト更新！':'';
+  $('#rList').innerHTML=`<dt>スコア</dt><dd>${r.score.toLocaleString()}</dd><dt>命中</dt><dd>${r.hits}/${r.total}（${r.acc}%）</dd>`+
+    `<dt>最大コンボ</dt><dd>${r.maxCombo}</dd><dt>パンチ</dt><dd>${r.punches}発</dd><dt>PERFECT</dt><dd>${r.perfect}</dd>`;
+}
+function stopAudio(){ for(const s of G?.sources||[]){ try{s.stop();}catch(e){} } }
+
+function loop(time,frame){
+  if(!G){ renderer.render(scene,camera); return; }
+  const now=performance.now();
+  // 頭の位置
+  let quat=_q.identity();
+  if(frame){
+    const pose=frame.getViewerPose(renderer.xr.getReferenceSpace());
+    if(pose){ const p=pose.transform.position,o=pose.transform.orientation; G.head.set(p.x,p.y,p.z); quat=_q.set(o.x,o.y,o.z,o.w); }
+    updateHands(frame,now);
+  }else{
+    const base=G.cfg.pose==='sit'?1.2:1.6;
+    const duck=now<G.desk.duckUntil?(G.cfg.pose==='sit'?0.2:0.35):0;
+    const lean=now<G.desk.leanUntil?G.desk.lean*0.3:0;
+    G.head.set(lean,base-duck,0); camera.position.copy(G.head);
+  }
+
+  if(G.phase==='calib'){
+    const el=(now-G.calibStart)/1000, sit=G.cfg.pose==='sit';
+    calibrate(G.head,quat);
+    hud.mesh.position.set(0,G.H+0.35,-2.4);
+    hudDraw([{text:sit?'座って正面を向き、':'足を肩幅に開いて正面を向き、',size:52,y:150},
+             {text:'両手を顔の前で構えてください',size:52,y:230},
+             {text:String(Math.max(1,Math.ceil(3-el))),size:150,y:390,color:'#ffd23a'}]);
+    if(el>=3){ hud.mesh.position.set(0,G.H+0.75,-3.2); startPlay(); }
+  }else if(G.phase==='play'){
+    const t=gameTime();
+    if(G.segs[0].builtin){ // ビート音を少し先まで予約
+      const spb=60/G.lv.beatBpm, off=G.segs[0].offset;
+      while(off+G.beatIdx*spb < t+0.3 && off+G.beatIdx*spb < G.cfg.duration){
+        const bt=off+G.beatIdx*spb; if(bt>=t-0.05) beatAt(G.t0+bt,G.beatIdx); G.beatIdx++;
+      }
+    }
+    tick(t,now); hudPlay(t,now);
+    if(t>=G.cfg.duration+0.5) finish();
+  }else if(G.phase==='result'){
+    if(now>G.endAt){ G.phase='done'; if(G.mode==='xr') renderer.xr.getSession()?.end(); }
+  }
+  // ことばの表示
+  for(let i=popups.length-1;i>=0;i--){
+    const p=popups[i], k=(now-p.born)/600;
+    p.sp.position.y+=0.004; p.sp.material.opacity=1-k;
+    if(k>=1){ stage.remove(p.sp); p.sp.material.dispose(); popups.splice(i,1); }
+  }
+  renderer.render(scene,camera);
+}
+renderer.setAnimationLoop(loop);
+
+/* ====================== 開始・終了 ====================== */
+$('#btnVR').onclick=async()=>{
+  try{
+    ac().resume();
+    const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','hand-tracking']});
+    newGame('xr');
+    await renderer.xr.setSession(session);
+    session.addEventListener('end',()=>{
+      stopAudio();
+      for(const f of Object.values(fists)) f.visible=false;
+      if(G && G.result){ $('#result').classList.add('on'); }
+      G=null;
+    });
+  }catch(e){ setStatus('VRを開始できませんでした：'+e.message); console.error(e); }
+};
+$('#btnDesk').onclick=()=>{
+  ac().resume();
+  $('#deskWrap').classList.add('on');
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+  newGame('desk'); G.desk.auto=TEST.has('auto');
+};
+function closeDesk(){
+  stopAudio(); $('#deskWrap').classList.remove('on');
+  if(G && G.result) $('#result').classList.add('on');
+  G=null;
+}
+$('#deskClose').onclick=closeDesk;
+$('#rClose').onclick=()=>$('#result').classList.remove('on');
+
+addEventListener('keydown',e=>{
+  if(!G || G.mode!=='desk' || G.phase!=='play') return;
+  const now=performance.now(), t=gameTime();
+  if(e.code==='KeyF'||e.code==='KeyJ'){
+    const hand=e.code==='KeyF'?'L':'R';
+    const it=G.active.find(i=>!i.done && i.ev.kind==='punch' && (G.cfg.arm!=='both'||i.ev.hand===hand) && Math.abs(t-i.ev.time)<0.25);
+    if(it) registerHit(it,t-it.ev.time);
+  }
+  if(e.code==='Space'){ G.desk.duckUntil=now+500; e.preventDefault(); }
+  if(e.code==='ArrowLeft'){ G.desk.lean=-1; G.desk.leanUntil=now+500; }
+  if(e.code==='ArrowRight'){ G.desk.lean=1; G.desk.leanUntil=now+500; }
+  if(G.phase==='result' && e.code==='Escape') closeDesk();
+});
+// 結果が出たらPC確認モードも自動で閉じる
+setInterval(()=>{ if(G && G.mode==='desk' && G.phase==='done') closeDesk(); },500);
+
+renderAll();
+loadTracks();
+</script>
+</body>
+</html>
