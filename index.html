@@ -118,13 +118,14 @@
     <summary>はじめて遊ぶ前に</summary>
     <p>Quest の「設定 → 動きのトラッキング → ハンドトラッキング」をオンにして、コントローラーを置いてください。手を認識すると、青と赤のグローブが表示されます。</p>
     <p>青い的は左手、赤い的は右手で打ちます。矢印つきの的は、矢印の方向へ振るフックかアッパーです。オレンジのバーはしゃがんでくぐり、黄色い壁は矢印の方向へ体を傾けてよけます。座ったままモードでは、しゃがむバーは出ず、左右によける壁だけになります。</p>
+    <p>左上の一時停止ボタンをパンチすると止まります。止まっている間は、緑のボタン（続ける）か赤い家のボタン（ホームへ）をパンチして選びます。終わったあとの結果画面でも、家のボタンでホームに戻れます。</p>
     <p>ランクの目安は、S：ほぼ全部当ててコンボも長い、A：8割以上、B：6割5分以上、C：それ以下です。</p>
   </details>
 </main>
 
 <div id="deskWrap">
   <button class="small" id="deskClose">やめる</button>
-  <div id="deskHelp">F＝左パンチ　J＝右パンチ　スペース＝しゃがむ　←→＝体を傾ける</div>
+  <div id="deskHelp">F＝左パンチ　J＝右パンチ　スペース＝しゃがむ　←→＝体を傾ける　P＝一時停止／続ける　H＝ホームへ</div>
 </div>
 
 <div id="result"><div class="card">
@@ -462,6 +463,60 @@ function popup(word,pos){
   popups.push({sp,born:performance.now()});
 }
 
+/* ====================== パンチで押すボタン ====================== */
+function iconTex(kind,bg){
+  const cv=document.createElement('canvas'); cv.width=cv.height=256; const x=cv.getContext('2d');
+  x.fillStyle=bg; x.beginPath(); x.arc(128,128,120,0,Math.PI*2); x.fill();
+  x.lineWidth=10; x.strokeStyle='rgba(255,255,255,.85)'; x.stroke();
+  x.fillStyle='#fff';
+  if(kind==='pause'){ x.fillRect(78,64,34,128); x.fillRect(144,64,34,128); }
+  if(kind==='play'){ x.beginPath(); x.moveTo(94,60); x.lineTo(94,196); x.lineTo(200,128); x.closePath(); x.fill(); }
+  if(kind==='home'){
+    x.beginPath(); x.moveTo(128,52); x.lineTo(212,128); x.lineTo(186,128); x.lineTo(186,200); x.lineTo(70,200); x.lineTo(70,128); x.lineTo(44,128); x.closePath(); x.fill();
+    x.fillStyle=bg; x.fillRect(110,146,36,54);
+  }
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+const G_BTN=new THREE.CircleGeometry(0.085,40);
+function makeBtn(kind,bg){
+  const m=new THREE.Mesh(G_BTN,new THREE.MeshBasicMaterial({map:iconTex(kind,bg),transparent:true,depthTest:false}));
+  m.renderOrder=15; m.visible=false; m.userData.kind=kind; stage.add(m); return m;
+}
+const PAUSE_POS=[['pause',-0.45,0.22,-0.4]];  // 左上。的のコースから外してある
+const BTN={ pause:makeBtn('pause','#4a4f9a'), resume:makeBtn('play','#23a05a'), home:makeBtn('home','#d0503f') };
+function showBtns(list){ // list: [[名前,x,y,z], ...]  yは頭の高さからの差
+  for(const b of Object.values(BTN)) b.visible=false;
+  for(const [k,x,y,z] of list){ const b=BTN[k]; b.position.set(x,G.H+y,z); b.visible=true; b.scale.setScalar(1); }
+}
+function pressedBtn(now){
+  if(now<(G.btnLock||0)) return null;
+  for(const h of ['L','R']){
+    const s=handState(h); if(!s) continue;
+    for(const b of Object.values(BTN)){
+      if(b.visible && s.pos.distanceTo(b.position)<0.14 && s.vel.length()>0.5){
+        G.btnLock=now+800; b.scale.setScalar(1.3); return b.userData.kind;
+      }
+    }
+  }
+  return null;
+}
+function doPause(){
+  if(!G || G.phase!=='play' || G.paused) return;
+  G.paused=true; G.resumeAt=0; G.btnLock=performance.now()+600;
+  ac().suspend();  // 音楽も時間も止まる
+  showBtns([['resume',-0.22,-0.1,-0.42],['home',0.22,-0.1,-0.42]]);
+  hudDraw([{text:'一時停止中',size:110,y:220},{text:'▶ 続ける　　⌂ ホームへ',size:48,y:380,color:'#9aa0c8'}]);
+}
+function doResume(){
+  if(!G || !G.paused || G.resumeAt) return;
+  G.resumeAt=performance.now()+3000; showBtns([]);
+}
+function goHome(){
+  if(!G) return;
+  G.aborted=true;
+  if(G.mode==='xr') renderer.xr.getSession()?.end(); else closeDesk();
+}
+
 /* ====================== 効果音・ビート ====================== */
 let noiseBuf=null;
 function noise(){ if(noiseBuf) return noiseBuf; const c=ac(); noiseBuf=c.createBuffer(1,c.sampleRate*0.3,c.sampleRate);
@@ -734,7 +789,8 @@ function finish(){
   if(G.result.newBest) lines.push({text:'自己ベスト更新！',size:48,x:512,y:460,color:'#ffd23a'});
   hudDraw(lines);
   showResult();
-  G.endAt=performance.now()+15000;
+  G.endAt=performance.now()+60000;
+  showBtns([['home',0,-0.15,-0.42]]); G.btnLock=performance.now()+1500;
 }
 function showResult(){
   const r=G.result, u=store.users.find(x=>x.id===G.cfg.user);
@@ -744,7 +800,11 @@ function showResult(){
   $('#rList').innerHTML=`<dt>スコア</dt><dd>${r.score.toLocaleString()}</dd><dt>命中</dt><dd>${r.hits}/${r.total}（${r.acc}%）</dd>`+
     `<dt>最大コンボ</dt><dd>${r.maxCombo}</dd><dt>パンチ</dt><dd>${r.punches}発</dd><dt>PERFECT</dt><dd>${r.perfect}</dd>`;
 }
-function stopAudio(){ for(const s of G?.sources||[]){ try{s.stop();}catch(e){} } }
+function stopAudio(){
+  for(const s of G?.sources||[]){ try{s.stop();}catch(e){} }
+  if(actx && actx.state==='suspended') actx.resume();
+  for(const b of Object.values(BTN)) b.visible=false;
+}
 
 function loop(time,frame){
   if(!G){ renderer.render(scene,camera); return; }
@@ -769,8 +829,17 @@ function loop(time,frame){
     hudDraw([{text:sit?'座って正面を向き、':'足を肩幅に開いて正面を向き、',size:52,y:150},
              {text:'両手を顔の前で構えてください',size:52,y:230},
              {text:String(Math.max(1,Math.ceil(3-el))),size:150,y:390,color:'#ffd23a'}]);
-    if(el>=3){ hud.mesh.position.set(0,G.H+0.75,-3.2); startPlay(); }
+    if(el>=3){ hud.mesh.position.set(0,G.H+0.75,-3.2); startPlay(); showBtns(PAUSE_POS); }
+  }else if(G.phase==='play' && G.paused){
+    if(G.resumeAt){
+      const left=Math.ceil((G.resumeAt-now)/1000);
+      if(left!==G.cdShown){ G.cdShown=left; hudDraw([{text:String(Math.max(1,left)),size:220,y:260,color:'#ffd23a'}]); }
+      if(now>=G.resumeAt){ G.paused=false; G.resumeAt=0; G.cdShown=0; G.hudNext=0; ac().resume(); showBtns(PAUSE_POS); }
+    }else if(G.mode==='xr'){
+      const k=pressedBtn(now); if(k==='resume') doResume(); else if(k==='home') goHome();
+    }
   }else if(G.phase==='play'){
+    if(G.mode==='xr' && pressedBtn(now)==='pause'){ doPause(); renderer.render(scene,camera); return; }
     const t=gameTime();
     if(G.segs[0].builtin){ // ビート音を少し先まで予約
       const spb=60/G.lv.beatBpm, off=G.segs[0].offset;
@@ -781,6 +850,7 @@ function loop(time,frame){
     tick(t,now); hudPlay(t,now);
     if(t>=G.cfg.duration+0.5) finish();
   }else if(G.phase==='result'){
+    if(G.mode==='xr' && pressedBtn(now)==='home') goHome();
     if(now>G.endAt){ G.phase='done'; if(G.mode==='xr') renderer.xr.getSession()?.end(); }
   }
   // ことばの表示
@@ -800,6 +870,8 @@ $('#btnVR').onclick=async()=>{
     const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','hand-tracking']});
     newGame('xr');
     await renderer.xr.setSession(session);
+    // Questのメニューボタンなどで画面から離れたら自動で一時停止
+    session.addEventListener('visibilitychange',()=>{ if(session.visibilityState!=='visible') doPause(); });
     session.addEventListener('end',()=>{
       stopAudio();
       for(const f of Object.values(fists)) f.visible=false;
@@ -823,7 +895,11 @@ $('#deskClose').onclick=closeDesk;
 $('#rClose').onclick=()=>$('#result').classList.remove('on');
 
 addEventListener('keydown',e=>{
-  if(!G || G.mode!=='desk' || G.phase!=='play') return;
+  if(!G || G.mode!=='desk') return;
+  if(e.code==='KeyH' && (G.paused || G.phase==='result')){ goHome(); return; }
+  if(G.phase!=='play') return;
+  if(e.code==='KeyP'){ G.paused?doResume():doPause(); return; }
+  if(G.paused) return;
   const now=performance.now(), t=gameTime();
   if(e.code==='KeyF'||e.code==='KeyJ'){
     const hand=e.code==='KeyF'?'L':'R';
@@ -833,7 +909,6 @@ addEventListener('keydown',e=>{
   if(e.code==='Space'){ G.desk.duckUntil=now+500; e.preventDefault(); }
   if(e.code==='ArrowLeft'){ G.desk.lean=-1; G.desk.leanUntil=now+500; }
   if(e.code==='ArrowRight'){ G.desk.lean=1; G.desk.leanUntil=now+500; }
-  if(G.phase==='result' && e.code==='Escape') closeDesk();
 });
 // 結果が出たらPC確認モードも自動で閉じる
 setInterval(()=>{ if(G && G.mode==='desk' && G.phase==='done') closeDesk(); },500);
