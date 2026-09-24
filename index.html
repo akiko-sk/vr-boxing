@@ -779,18 +779,20 @@ function finish(){
   for(const it of G.active) stage.remove(it.mesh); G.active=[];
   const R={S:'#ffd23a',A:'#4cd98a',B:'#3fa9ff',C:'#9aa0c8'};
   const lines=[
-    {text:'ランク',size:44,x:230,y:80,color:'#9aa0c8'},
-    {text:rank,size:260,x:230,y:270,color:R[rank]},
+    {text:'ランク',size:44,x:230,y:70,color:'#9aa0c8'},
+    {text:rank,size:240,x:230,y:250,color:R[rank]},
     {text:`スコア ${st.score.toLocaleString()}`,size:54,x:700,y:110},
     {text:`命中 ${rec.hits}/${st.total}（${rec.acc}%）`,size:44,x:700,y:200},
     {text:`最大コンボ ${st.maxCombo}`,size:44,x:700,y:280},
     {text:`パンチ ${st.hit}発`,size:44,x:700,y:360},
   ];
-  if(G.result.newBest) lines.push({text:'自己ベスト更新！',size:48,x:512,y:460,color:'#ffd23a'});
+  lines.push({text:G.result.newBest?'自己ベスト更新！':'',size:44,x:700,y:430,color:'#ffd23a'});
+  lines.push({text:'↓ 家のボタンをパンチでホームへ',size:40,x:512,y:485,color:'#9aa0c8'});
   hudDraw(lines);
   showResult();
   G.endAt=performance.now()+60000;
-  showBtns([['home',0,-0.15,-0.42]]); G.btnLock=performance.now()+1500;
+  hud.mesh.position.set(0,G.H+0.15,-1.8);  // 結果は近くに出して、すぐ下に家のボタン
+  showBtns([['home',0,-0.2,-0.45]]); G.btnLock=performance.now()+1500;
 }
 function showResult(){
   const r=G.result, u=store.users.find(x=>x.id===G.cfg.user);
@@ -850,6 +852,7 @@ function loop(time,frame){
     tick(t,now); hudPlay(t,now);
     if(t>=G.cfg.duration+0.5) finish();
   }else if(G.phase==='result'){
+    if(now>(G.btnLock||0)) BTN.home.scale.setScalar(1.4+0.12*Math.sin(now/180));  // ゆっくり脈打たせて目立たせる
     if(G.mode==='xr' && pressedBtn(now)==='home') goHome();
     if(now>G.endAt){ G.phase='done'; if(G.mode==='xr') renderer.xr.getSession()?.end(); }
   }
