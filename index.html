@@ -117,7 +117,7 @@
   <details>
     <summary>はじめて遊ぶ前に</summary>
     <p>Quest の「設定 → 動きのトラッキング → ハンドトラッキング」をオンにして、コントローラーを置いてください。手を認識すると、青と赤のグローブが表示されます。</p>
-    <p>青い的は左手、赤い的は右手で打ちます。矢印つきの的は、矢印の方向へ振るフックかアッパーです。オレンジのバーはしゃがんでくぐり、黄色い壁は矢印の方向へ体を傾けてよけます。</p>
+    <p>青い的は左手、赤い的は右手で打ちます。矢印つきの的は、矢印の方向へ振るフックかアッパーです。オレンジのバーはしゃがんでくぐり、黄色い壁は矢印の方向へ体を傾けてよけます。座ったままモードでは、しゃがむバーは出ず、左右によける壁だけになります。</p>
     <p>ランクの目安は、S：ほぼ全部当ててコンボも長い、A：8割以上、B：6割5分以上、C：それ以下です。</p>
   </details>
 </main>
@@ -223,9 +223,9 @@ function renderRecords(){
 function renderAll(){
   renderUsers();
   opt($('#levels'), Object.entries(LEVELS).map(([k,v])=>[k,v.label,v.sub]), 'level');
-  opt($('#minutes'), [[5,'5分'],[7,'7分'],[10,'10分']], 'minutes');
+  opt($('#minutes'), [[1,'1分'],[5,'5分'],[7,'7分'],[10,'10分']], 'minutes');
   opt($('#arms'), [['both','両手'],['L','片手（左）'],['R','片手（右）']], 'arm');
-  opt($('#poses'), [['stand','立って'],['sit','座ったまま','しゃがみ・傾きが浅くなります']], 'pose');
+  opt($('#poses'), [['stand','立って'],['sit','座ったまま','しゃがまず、左右によけるだけ']], 'pose');
   renderTracks(); renderRecords();
 }
 
@@ -517,7 +517,7 @@ function tokenSpec(c,cfg){
 }
 function buildChart(segments,cfg,lv){
   const evs=[], leadIn=lv.travel+2.5, endCut=cfg.duration-2.5, pool=POOLS[cfg.level];
-  let phrase=0, prevEnd=-1;
+  let phrase=0, prevEnd=-1, sitFlip=0;
   for(const seg of segments){
     const spb=60/seg.bpm, beats=[];
     for(let t=seg.start+seg.offset; t<seg.start+seg.dur-1.5; t+=spb) beats.push(t);
@@ -529,7 +529,8 @@ function buildChart(segments,cfg,lv){
       // 障害物で始まる型は、直前が詰まっていたら避ける
       if('D<>'.includes(pat[0]) && beats[b]-prevEnd<spb*1.5) pat=pool[0];
       for(let s=0;s<16;s++){
-        const c=pat[s]; if(c==='.') continue;
+        let c=pat[s]; if(c==='.') continue;
+        if(c==='D' && cfg.pose==='sit') c=(sitFlip++%2)?'>':'<';  // 座りはしゃがまず左右によける
         const isPunch=!'D<>'.includes(c);
         if(cfg.arm!=='both' && isPunch && s%2===1) continue;  // 片手は半拍を間引く
         const spec=tokenSpec(c,cfg); if(!spec) continue;
